@@ -1,5 +1,5 @@
 
-import os
+import os, sys, getopt
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -15,34 +15,41 @@ tf.random.set_seed(1618)
 #tf.logging.set_verbosity(tf.logging.ERROR)   # Uncomment for TF1.
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-ALGORITHM = "guesser"
+#ALGORITHM = "guesser"
 #ALGORITHM = "tf_net"
 #ALGORITHM = "tf_conv"
 
-DATASET = "mnist_d"
+#DATASET = "mnist_d"
 #DATASET = "mnist_f"
 #DATASET = "cifar_10"
 #DATASET = "cifar_100_f"
 #DATASET = "cifar_100_c"
 
-if DATASET == "mnist_d":
-    NUM_CLASSES = 10
-    IH = 28             # Input Height
-    IW = 28             # Input Width
-    IZ = 1              # Input Depth (Color)
-    IS = 784            # Input Size (ANN use)
-elif DATASET == "mnist_f":
-    NUM_CLASSES = 10
-    IH = 28
-    IW = 28
-    IZ = 1
-    IS = 784
-elif DATASET == "cifar_10":
-    pass                                 # TODO: Add this case.
-elif DATASET == "cifar_100_f":
-    pass                                 # TODO: Add this case.
-elif DATASET == "cifar_100_c":
-    pass                                 # TODO: Add this case.
+EPOCHS = 50
+BATCH_SIZE = 100
+
+def setDataDimensions():
+    global NUM_CLASSES, IH, IW, IZ, IS, HN
+    if DATASET == "mnist_d":
+        NUM_CLASSES = 10
+        IH = 28             # Input Height
+        IW = 28             # Input Width
+        IZ = 1              # Input Depth (Color)
+        IS = 784            # Input Size (ANN use)
+        HN = 512            # Number of Hidden Neurons
+    elif DATASET == "mnist_f":
+        NUM_CLASSES = 10
+        IH = 28
+        IW = 28
+        IZ = 1
+        IS = 784
+        HN = 512
+    elif DATASET == "cifar_10":
+        pass                                 # TODO: Add this case.
+    elif DATASET == "cifar_100_f":
+        pass                                 # TODO: Add this case.
+    elif DATASET == "cifar_100_c":
+        pass                                 # TODO: Add this case.
 
 
 #=========================<Classifier Functions>================================
@@ -56,12 +63,12 @@ def guesserClassifier(xTest):
     return np.array(ans)
 
 
-def buildTFNeuralNet(x, y, eps = 6):
+def buildTFNeuralNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS):
     ann = tf.keras.models.Sequential([tf.keras.layers.Flatten(),
-                                      tf.keras.layers.Dense(HIDDEN_NEURONS, activation=tf.nn.sigmoid),
+                                      tf.keras.layers.Dense(HN, activation=tf.nn.sigmoid),
                                       tf.keras.layers.Dense(NUM_CLASSES, activation=tf.nn.softmax)])
     ann.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
-    ann.fit(x, y, validation_split=0.1, epochs=eps, shuffle=True)
+    ann.fit(x, y, validation_split=0.1, batch_size=batchSize, epochs=eps, shuffle=True)
     return ann
 
 
@@ -119,7 +126,7 @@ def trainModel(data):
         return None   # Guesser has no model, as it is just guessing.
     elif ALGORITHM == "tf_net":
         print("Building and training TF_NN.")
-        return buildTFNeuralNet(xTrain, yTrain)
+        return buildTFNeuralNet(xTrain, yTrain, batchSize = BATCH_SIZE, eps=EPOCHS)
     elif ALGORITHM == "tf_conv":
         print("Building and training TF_CNN.")
         return buildTFConvNet(xTrain, yTrain)
@@ -166,7 +173,49 @@ def evalResults(data, preds):
 
 #=========================<Main>================================================
 
+def parseArgs():
+    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE
+    ALGORITHM, DATASET = 'tf_net', 'mnist_d'
+    argv = sys.argv[1:]
+    try:
+        opts, _ = getopt.getopt(argv, 'a:d:e:b:h')
+    except:
+        raise ValueError('Unrecognized argument. See -h for help')
+
+    algorithms = ['guesser', 'tf_net', 'tf_conv']
+    datasets = ['mnist_d', 'mnist_f', 'cifar_10', 'cifar_100', 'cifar_100_c', 'cifar_100_f']
+    for opt, arg in opts:
+        if opt in ['-a']:
+            arg = arg.lower()
+            if arg not in algorithms:
+                raise ValueError('Unrecognized algorithm. Try one of %s' % algorithms)
+            ALGORITHM = arg
+        elif opt in ['-d']:
+            arg = arg.lower()
+            if arg not in datasets:
+                raise ValueError('Unrecognized algorithm. Try one of %s' % datasets)
+            DATASET = arg
+        elif opt in ['-e']:
+            EPOCHS = int(arg)
+            if EPOCHS < 1:
+                raise ValueError('Number of epochs must be at least 1')
+        elif opt in ['-b']:
+            BATCH_SIZE = int(arg)
+            if EPOCHS < 1:
+                raise ValueError('Batch size must be at least 1')
+        elif opt in ['-h']:
+            print('Usage: python lab2.py\n\
+                -a <algorithm> | %s\n\
+                -d <dataset> | %s\n\
+                -e <epochs>\n\
+                -b <batchSize>\n'
+                % (algorithms, datasets))
+            sys.exit()
+
+    setDataDimensions()
+
 def main():
+    parseArgs()
     raw = getRawData()
     data = preprocessData(raw)
     model = trainModel(data[0])
