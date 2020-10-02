@@ -224,12 +224,16 @@ def evalResults(data, preds):
     print("Classifier algorithm: %s" % ALGORITHM)
     print("Classifier accuracy: %f%%" % (accuracy * 100))
     print()
-    if SAVE_PATH != None:
-        # Save algorithm and dataset for future loading
-        metadata = open('%s/meta.txt' % SAVE_PATH, 'w')
-        metadata.write('%s\n%s\nepochs=%s\nbatchSize=%s\naccuracy=%f%%\n'
-                        % (ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, (accuracy * 100)))
-        metadata.close()
+    return (accuracy * 100)
+
+
+def saveMetaData(model, accuracy):
+    # Save algorithm and dataset for future loading
+    metadata = open('%s/meta.txt' % SAVE_PATH, 'w')
+    metadata.write('%s\n%s\nepochs=%s\nbatchSize=%s\naccuracy=%f%%\n\n\n'
+                    % (ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, accuracy))
+    model.summary(print_fn=lambda x: metadata.write(x + '\n'))
+    metadata.close()
 
 
 #=========================<Main>================================================
@@ -243,10 +247,7 @@ def parseArgs():
     except:
         raise ValueError('Unrecognized argument. See -h for help')
 
-    # Default save the model, create path
-    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H.%M.%S')
-    SAVE_PATH = './models/%s-%s-%s' % (ALGORITHM, DATASET, timestamp)
-
+    shouldSave = True
     algorithms = ['guesser', 'tf_net', 'tf_conv']
     datasets = ['mnist_d', 'mnist_f', 'cifar_10', 'cifar_100_c', 'cifar_100_f']
     for opt, arg in opts:
@@ -269,10 +270,10 @@ def parseArgs():
             if BATCH_SIZE < 1:
                 raise ValueError('Batch size must be at least 1')
         elif opt == '-s':
-            SAVE_PATH = None
+            shouldSave = False
         elif opt == '-l':
             LOAD_PATH = arg
-            SAVE_PATH = None    # If model is being loaded, no need to save it again
+            shouldSave = False    # If model is being loaded, no need to save it again
 
             # Load in the appropriate dataset and use appropriate algorithm from saved model
             metadata = open('%s/meta.txt' % LOAD_PATH, 'r')
@@ -289,6 +290,11 @@ def parseArgs():
                 % (algorithms, datasets))
             sys.exit()
 
+    # Default save the model, create path
+    if shouldSave:
+        timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H.%M.%S')
+        SAVE_PATH = './models/%s-%s-%s' % (ALGORITHM, DATASET, timestamp)
+
     setDataDimensions()
 
 
@@ -298,8 +304,9 @@ def main():
     data = preprocessData(raw)
     model = trainModel(data[0])
     preds = runModel(data[1][0], model)
-    evalResults(data[1], preds)
-
+    accuracy = evalResults(data[1], preds)
+    if SAVE_PATH != None:
+        saveMetaData(model, accuracy)
 
 if __name__ == '__main__':
     main()
