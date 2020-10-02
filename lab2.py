@@ -27,29 +27,40 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 EPOCHS = 10
 BATCH_SIZE = 100
+HN = 512            # Number of Hidden Neurons
 
 def setDataDimensions():
-    global NUM_CLASSES, IH, IW, IZ, IS, HN
+    global NUM_CLASSES, IH, IW, IZ, IS
     if DATASET == "mnist_d":
         NUM_CLASSES = 10
         IH = 28             # Input Height
         IW = 28             # Input Width
         IZ = 1              # Input Depth (Color)
         IS = 784            # Input Size (ANN use)
-        HN = 512            # Number of Hidden Neurons
     elif DATASET == "mnist_f":
         NUM_CLASSES = 10
         IH = 28
         IW = 28
         IZ = 1
         IS = 784
-        HN = 512
     elif DATASET == "cifar_10":
-        pass                                 # TODO: Add this case.
+        NUM_CLASSES = 10
+        IH = 32
+        IW = 32
+        IZ = 3
+        IS = IH * IW
     elif DATASET == "cifar_100_f":
-        pass                                 # TODO: Add this case.
+        NUM_CLASSES = 100
+        IH = 32
+        IW = 32
+        IZ = 3
+        IS = IH * IW
     elif DATASET == "cifar_100_c":
-        pass                                 # TODO: Add this case.
+        NUM_CLASSES = 20
+        IH = 32
+        IW = 32
+        IZ = 3
+        IS = IH * IW
 
 
 #=========================<Classifier Functions>================================
@@ -93,18 +104,16 @@ def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dro
 #=========================<Pipeline Functions>==================================
 
 def getRawData():
-    if DATASET == "mnist_d":
-        mnist = tf.keras.datasets.mnist
-        (xTrain, yTrain), (xTest, yTest) = mnist.load_data()
-    elif DATASET == "mnist_f":
-        mnist = tf.keras.datasets.fashion_mnist
-        (xTrain, yTrain), (xTest, yTest) = mnist.load_data()
-    elif DATASET == "cifar_10":
-        pass      # TODO: Add this case.
-    elif DATASET == "cifar_100_f":
-        pass      # TODO: Add this case.
-    elif DATASET == "cifar_100_c":
-        pass      # TODO: Add this case.
+    if DATASET == "mnist_d":        # Goal: >99% accuracy
+        (xTrain, yTrain), (xTest, yTest) = tf.keras.datasets.mnist.load_data()
+    elif DATASET == "mnist_f":      # Goal: >92% accuracy
+        (xTrain, yTrain), (xTest, yTest) = tf.keras.datasets.fashion_mnist.load_data()
+    elif DATASET == "cifar_10":     # Goal: >70% accuracy
+        (xTrain, yTrain), (xTest, yTest) = tf.keras.datasets.cifar10.load_data()
+    elif DATASET == "cifar_100_f":  # Goal: >35% accuracy
+        (xTrain, yTrain), (xTest, yTest) = tf.keras.datasets.cifar100.load_data(label_mode='fine')
+    elif DATASET == "cifar_100_c":  # Goal: >50% accuracy
+        (xTrain, yTrain), (xTest, yTest) = tf.keras.datasets.cifar100.load_data(label_mode='coarse')
     else:
         raise ValueError("Dataset not recognized.")
     print("Dataset: %s" % DATASET)
@@ -193,7 +202,7 @@ def parseArgs():
         raise ValueError('Unrecognized argument. See -h for help')
 
     algorithms = ['guesser', 'tf_net', 'tf_conv']
-    datasets = ['mnist_d', 'mnist_f', 'cifar_10', 'cifar_100', 'cifar_100_c', 'cifar_100_f']
+    datasets = ['mnist_d', 'mnist_f', 'cifar_10', 'cifar_100_c', 'cifar_100_f']
     for opt, arg in opts:
         if opt in ['-a']:
             arg = arg.lower()
