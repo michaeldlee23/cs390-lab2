@@ -25,7 +25,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 #DATASET = "cifar_100_f"
 #DATASET = "cifar_100_c"
 
-EPOCHS = 50
+EPOCHS = 10
 BATCH_SIZE = 100
 
 def setDataDimensions():
@@ -72,9 +72,23 @@ def buildTFNeuralNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS):
     return ann
 
 
-def buildTFConvNet(x, y, eps = 10, dropout = True, dropRate = 0.2):
-    pass        #TODO: Implement a CNN here. dropout option is required.
-    return None
+def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dropRate = 0.2):
+    layers = [tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IH, IW, IZ)),
+              tf.keras.layers.MaxPooling2D((2, 2)),
+              tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+            #   tf.keras.layers.MaxPooling2D((2, 2)),
+            #   tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+              tf.keras.layers.Flatten(),
+              tf.keras.layers.Dense(100, activation='relu'),
+              tf.keras.layers.Dropout(dropRate),
+              tf.keras.layers.Dense(NUM_CLASSES, activation='softmax')]
+    cnn = tf.keras.models.Sequential(layers)
+    cnn.summary()
+    cnn.compile(optimizer='adam',
+                loss='categorical_crossentropy',
+                metrics=['accuracy'])
+    cnn.fit(x, y, validation_split=0.1, batch_size=batchSize, epochs=eps, shuffle=True)
+    return cnn
 
 #=========================<Pipeline Functions>==================================
 
@@ -101,9 +115,9 @@ def getRawData():
     return ((xTrain, yTrain), (xTest, yTest))
 
 
-
 def preprocessData(raw):
     ((xTrain, yTrain), (xTest, yTest)) = raw
+    xTrain, xTest = xTrain / 255.0, xTest / 255.0
     if ALGORITHM != "tf_conv":
         xTrainP = xTrain.reshape((xTrain.shape[0], IS))
         xTestP = xTest.reshape((xTest.shape[0], IS))
@@ -119,20 +133,18 @@ def preprocessData(raw):
     return ((xTrainP, yTrainP), (xTestP, yTestP))
 
 
-
 def trainModel(data):
     xTrain, yTrain = data
     if ALGORITHM == "guesser":
         return None   # Guesser has no model, as it is just guessing.
     elif ALGORITHM == "tf_net":
         print("Building and training TF_NN.")
-        return buildTFNeuralNet(xTrain, yTrain, batchSize = BATCH_SIZE, eps=EPOCHS)
+        return buildTFNeuralNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
     elif ALGORITHM == "tf_conv":
         print("Building and training TF_CNN.")
-        return buildTFConvNet(xTrain, yTrain)
+        return buildTFConvNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
     else:
         raise ValueError("Algorithm not recognized.")
-
 
 
 def runModel(data, model):
@@ -158,7 +170,6 @@ def runModel(data, model):
         raise ValueError("Algorithm not recognized.")
 
 
-
 def evalResults(data, preds):
     xTest, yTest = data
     acc = 0
@@ -168,7 +179,6 @@ def evalResults(data, preds):
     print("Classifier algorithm: %s" % ALGORITHM)
     print("Classifier accuracy: %f%%" % (accuracy * 100))
     print()
-
 
 
 #=========================<Main>================================================
@@ -201,7 +211,7 @@ def parseArgs():
                 raise ValueError('Number of epochs must be at least 1')
         elif opt in ['-b']:
             BATCH_SIZE = int(arg)
-            if EPOCHS < 1:
+            if BATCH_SIZE < 1:
                 raise ValueError('Batch size must be at least 1')
         elif opt in ['-h']:
             print('Usage: python lab2.py\n\
@@ -214,6 +224,7 @@ def parseArgs():
 
     setDataDimensions()
 
+
 def main():
     parseArgs()
     raw = getRawData()
@@ -221,7 +232,6 @@ def main():
     model = trainModel(data[0])
     preds = runModel(data[1][0], model)
     evalResults(data[1], preds)
-
 
 
 if __name__ == '__main__':
