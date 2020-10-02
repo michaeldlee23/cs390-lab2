@@ -7,6 +7,7 @@ from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropou
 from tensorflow.keras.utils import to_categorical
 import matplotlib as plt
 import random
+import time, datetime
 
 
 random.seed(1618)
@@ -30,6 +31,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 EPOCHS = 10
 BATCH_SIZE = 100
 HN = 512            # Number of Hidden Neurons
+SAVE_PATH = None
+LOAD_PATH = None
 
 def setDataDimensions():
     global NUM_CLASSES, IH, IW, IZ, IS
@@ -86,40 +89,40 @@ def buildTFNeuralNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS):
 
 
 def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dropRate = 0.2):
-    # layers = [tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IH, IW, IZ)),
-    #           tf.keras.layers.MaxPooling2D((2, 2)),
-    #           tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
-    #         #   tf.keras.layers.MaxPooling2D((2, 2)),
-    #         #   tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
-    #           tf.keras.layers.Flatten(),
-    #           tf.keras.layers.Dense(100, activation='relu'),
-    #           tf.keras.layers.Dropout(dropRate),
-    #           tf.keras.layers.Dense(NUM_CLASSES, activation='softmax')]
-    # cnn = tf.keras.models.Sequential(layers)
-    cnn = tf.keras.models.Sequential()
-    cnn.add(Conv2D(32, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
-    cnn.add(BatchNormalization())
-    cnn.add(Conv2D(32, (3, 3), padding='same', activation='elu'))
-    cnn.add(BatchNormalization())
-    cnn.add(MaxPooling2D((2, 2)))
-    cnn.add(Dropout(0.2))
+    layers = [tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IH, IW, IZ)),
+              tf.keras.layers.MaxPooling2D((2, 2)),
+              tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+            #   tf.keras.layers.MaxPooling2D((2, 2)),
+            #   tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+              tf.keras.layers.Flatten(),
+              tf.keras.layers.Dense(100, activation='relu'),
+              tf.keras.layers.Dropout(dropRate),
+              tf.keras.layers.Dense(NUM_CLASSES, activation='softmax')]
+    cnn = tf.keras.models.Sequential(layers)
+    # cnn = tf.keras.models.Sequential()
+    # cnn.add(Conv2D(32, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
+    # cnn.add(BatchNormalization())
+    # cnn.add(Conv2D(32, (3, 3), padding='same', activation='elu'))
+    # cnn.add(BatchNormalization())
+    # cnn.add(MaxPooling2D((2, 2)))
+    # cnn.add(Dropout(0.2))
 
-    cnn.add(Conv2D(64, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
-    cnn.add(BatchNormalization())
-    cnn.add(Conv2D(64, (3, 3), padding='same', activation='elu'))
-    cnn.add(BatchNormalization())
-    cnn.add(MaxPooling2D((2, 2)))
-    cnn.add(Dropout(0.3))
+    # cnn.add(Conv2D(64, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
+    # cnn.add(BatchNormalization())
+    # cnn.add(Conv2D(64, (3, 3), padding='same', activation='elu'))
+    # cnn.add(BatchNormalization())
+    # cnn.add(MaxPooling2D((2, 2)))
+    # cnn.add(Dropout(0.3))
 
-    cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
-    cnn.add(BatchNormalization())
-    cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu'))
-    cnn.add(BatchNormalization())
-    cnn.add(MaxPooling2D((2, 2)))
-    cnn.add(Dropout(0.4))
+    # cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
+    # cnn.add(BatchNormalization())
+    # cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu'))
+    # cnn.add(BatchNormalization())
+    # cnn.add(MaxPooling2D((2, 2)))
+    # cnn.add(Dropout(0.4))
 
-    cnn.add(Flatten())
-    cnn.add(Dense(NUM_CLASSES, activation='softmax'))
+    # cnn.add(Flatten())
+    # cnn.add(Dense(NUM_CLASSES, activation='softmax'))
 
     cnn.summary()
     opt = tf.optimizers.RMSprop(lr=0.001, decay=1e-6)
@@ -171,6 +174,8 @@ def preprocessData(raw):
 
 
 def trainModel(data):
+    if LOAD_PATH != None:
+        return tf.keras.models.load_model(LOAD_PATH)
     xTrain, yTrain = data
     if ALGORITHM == "guesser":
         return None   # Guesser has no model, as it is just guessing.
@@ -185,6 +190,9 @@ def trainModel(data):
 
 
 def runModel(data, model):
+    if ALGORITHM != "guesser" and SAVE_PATH != None:
+        print('saving model to %s...' % SAVE_PATH)
+        model.save(SAVE_PATH)
     if ALGORITHM == "guesser":
         return guesserClassifier(data)
     elif ALGORITHM == "tf_net":
@@ -216,46 +224,68 @@ def evalResults(data, preds):
     print("Classifier algorithm: %s" % ALGORITHM)
     print("Classifier accuracy: %f%%" % (accuracy * 100))
     print()
+    if SAVE_PATH != None:
+        # Save algorithm and dataset for future loading
+        metadata = open('%s/meta.txt' % SAVE_PATH, 'w')
+        metadata.write('%s\n%s\nepochs=%s\nbatchSize=%s\naccuracy=%f%%\n'
+                        % (ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, (accuracy * 100)))
+        metadata.close()
 
 
 #=========================<Main>================================================
 
 def parseArgs():
-    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE
+    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, SAVE_PATH, LOAD_PATH
     ALGORITHM, DATASET = 'tf_net', 'mnist_d'
     argv = sys.argv[1:]
     try:
-        opts, _ = getopt.getopt(argv, 'a:d:e:b:h')
+        opts, _ = getopt.getopt(argv, 'a:d:e:b:l:sh')
     except:
         raise ValueError('Unrecognized argument. See -h for help')
+
+    # Default save the model, create path
+    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H.%M.%S')
+    SAVE_PATH = './models/%s-%s-%s' % (ALGORITHM, DATASET, timestamp)
 
     algorithms = ['guesser', 'tf_net', 'tf_conv']
     datasets = ['mnist_d', 'mnist_f', 'cifar_10', 'cifar_100_c', 'cifar_100_f']
     for opt, arg in opts:
-        if opt in ['-a']:
+        if opt == '-a':
             arg = arg.lower()
             if arg not in algorithms:
                 raise ValueError('Unrecognized algorithm. Try one of %s' % algorithms)
             ALGORITHM = arg
-        elif opt in ['-d']:
+        elif opt == '-d':
             arg = arg.lower()
             if arg not in datasets:
                 raise ValueError('Unrecognized algorithm. Try one of %s' % datasets)
             DATASET = arg
-        elif opt in ['-e']:
+        elif opt == '-e':
             EPOCHS = int(arg)
             if EPOCHS < 1:
                 raise ValueError('Number of epochs must be at least 1')
-        elif opt in ['-b']:
+        elif opt == '-b':
             BATCH_SIZE = int(arg)
             if BATCH_SIZE < 1:
                 raise ValueError('Batch size must be at least 1')
-        elif opt in ['-h']:
-            print('Usage: python lab2.py\n\
+        elif opt == '-s':
+            SAVE_PATH = None
+        elif opt == '-l':
+            LOAD_PATH = arg
+            SAVE_PATH = None    # If model is being loaded, no need to save it again
+
+            # Load in the appropriate dataset and use appropriate algorithm from saved model
+            metadata = open('%s/meta.txt' % LOAD_PATH, 'r')
+            meta = [line.strip() for line in metadata.readlines()]
+            ALGORITHM, DATASET = meta[0], meta[1]
+        elif opt == '-h':
+            print('Usage: \n\
                 -a <algorithm> | %s\n\
                 -d <dataset> | %s\n\
                 -e <epochs>\n\
-                -b <batchSize>\n'
+                -b <batchSize>\n\
+                -s default=True\n\
+                -l <path to model>\n'
                 % (algorithms, datasets))
             sys.exit()
 

@@ -1,0 +1,5 @@
+tf_conv
+mnist_d
+epochs=2
+batchSize=100
+accuracy=98.990000%
