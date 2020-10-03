@@ -3,7 +3,7 @@ import os, sys, getopt
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropout, BatchNormalization
+from tensorflow.keras.layers import Conv2D, MaxPool2D, Dense, Flatten, Dropout, BatchNormalization
 from tensorflow.keras.utils import to_categorical
 import matplotlib as plt
 import random
@@ -89,40 +89,26 @@ def buildTFNeuralNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS):
 
 
 def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dropRate = 0.2):
-    layers = [tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IH, IW, IZ)),
-              tf.keras.layers.MaxPooling2D((2, 2)),
-              tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
-            #   tf.keras.layers.MaxPooling2D((2, 2)),
-            #   tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
-              tf.keras.layers.Flatten(),
-              tf.keras.layers.Dense(100, activation='relu'),
-              tf.keras.layers.Dropout(dropRate),
-              tf.keras.layers.Dense(NUM_CLASSES, activation='softmax')]
-    cnn = tf.keras.models.Sequential(layers)
-    # cnn = tf.keras.models.Sequential()
-    # cnn.add(Conv2D(32, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
-    # cnn.add(BatchNormalization())
-    # cnn.add(Conv2D(32, (3, 3), padding='same', activation='elu'))
-    # cnn.add(BatchNormalization())
-    # cnn.add(MaxPooling2D((2, 2)))
-    # cnn.add(Dropout(0.2))
+    cnn = tf.keras.models.Sequential()
+    cnn.add(Conv2D(32, (3, 3), padding='same', activation='relu', input_shape=(IH, IW, IZ)))
+    cnn.add(MaxPool2D((2, 2)))
 
-    # cnn.add(Conv2D(64, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
-    # cnn.add(BatchNormalization())
-    # cnn.add(Conv2D(64, (3, 3), padding='same', activation='elu'))
-    # cnn.add(BatchNormalization())
-    # cnn.add(MaxPooling2D((2, 2)))
-    # cnn.add(Dropout(0.3))
+    cnn.add(Conv2D(64, (3, 3), padding='same', activation='relu'))
+    cnn.add(BatchNormalization())
+    cnn.add(MaxPool2D((2, 2)))
 
-    # cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
-    # cnn.add(BatchNormalization())
-    # cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu'))
-    # cnn.add(BatchNormalization())
-    # cnn.add(MaxPooling2D((2, 2)))
-    # cnn.add(Dropout(0.4))
+    cnn.add(Conv2D(128, (3, 3), padding='same', activation='relu'))
+    cnn.add(BatchNormalization())
+    cnn.add(Conv2D(128, (3, 3), padding='same', activation='relu'))
+    cnn.add(BatchNormalization())
+    cnn.add(MaxPool2D((2, 2)))
 
-    # cnn.add(Flatten())
-    # cnn.add(Dense(NUM_CLASSES, activation='softmax'))
+    cnn.add(Flatten())
+    cnn.add(Dense(256, activation='relu'))
+    cnn.add(Dropout(dropRate))
+    cnn.add(Dense(256, activation='relu'))
+    cnn.add(Dropout(dropRate))
+    cnn.add(Dense(NUM_CLASSES, activation='softmax'))
 
     cnn.summary()
     opt = tf.optimizers.RMSprop(lr=0.001, decay=1e-6)
