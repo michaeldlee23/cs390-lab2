@@ -3,7 +3,7 @@ import os, sys, getopt
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropout, BatchNormalization
+from tensorflow.keras.layers import Conv2D, MaxPool2D, Dense, Flatten, Dropout, BatchNormalization
 from tensorflow.keras.utils import to_categorical
 import matplotlib as plt
 import random
@@ -88,18 +88,19 @@ def buildTFNeuralNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS):
     return ann
 
 
-def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dropRate = 0.2):
-    layers = [tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IH, IW, IZ)),
-              tf.keras.layers.MaxPooling2D((2, 2)),
-              tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
-            #   tf.keras.layers.MaxPooling2D((2, 2)),
-            #   tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
-              tf.keras.layers.Flatten(),
-              tf.keras.layers.Dense(100, activation='relu'),
-              tf.keras.layers.Dropout(dropRate),
-              tf.keras.layers.Dense(NUM_CLASSES, activation='softmax')]
-    cnn = tf.keras.models.Sequential(layers)
-    # cnn = tf.keras.models.Sequential()
+# def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dropRate = 0.2):
+def buildTFConvNet(trainSet, valSet, eps = EPOCHS, dropout = True, dropRate = 0.2):
+    # layers = [tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IH, IW, IZ)),
+    #           tf.keras.layers.MaxPooling2D((2, 2)),
+    #           tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+    #         #   tf.keras.layers.MaxPooling2D((2, 2)),
+    #         #   tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+    #           tf.keras.layers.Flatten(),
+    #           tf.keras.layers.Dense(100, activation='relu'),
+    #           tf.keras.layers.Dropout(dropRate),
+    #           tf.keras.layers.Dense(NUM_CLASSES, activation='softmax')]
+    # cnn = tf.keras.models.Sequential(layers)
+    cnn = tf.keras.models.Sequential()
     # cnn.add(Conv2D(32, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
     # cnn.add(BatchNormalization())
     # cnn.add(Conv2D(32, (3, 3), padding='same', activation='elu'))
@@ -107,19 +108,46 @@ def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dro
     # cnn.add(MaxPooling2D((2, 2)))
     # cnn.add(Dropout(0.2))
 
-    # cnn.add(Conv2D(64, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
+    # cnn.add(Conv2D(64, (3, 3), padding='same', activation='elu')
     # cnn.add(BatchNormalization())
     # cnn.add(Conv2D(64, (3, 3), padding='same', activation='elu'))
     # cnn.add(BatchNormalization())
     # cnn.add(MaxPooling2D((2, 2)))
     # cnn.add(Dropout(0.3))
 
-    # cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
+    # cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu')
     # cnn.add(BatchNormalization())
     # cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu'))
     # cnn.add(BatchNormalization())
     # cnn.add(MaxPooling2D((2, 2)))
     # cnn.add(Dropout(0.4))
+
+    # implementing AlexNet - Requires preprocessing to upscale images to 227x227
+    cnn.add(Conv2D(96, (11, 11), strides=(4, 4), activation='relu', input_shape=(IH, IW, IZ)))
+    cnn.add(BatchNormalization())
+    cnn.add(MaxPool2D((3, 3), strides=(2, 2)))
+
+    cnn.add(Conv2D(256, (5, 5), strides=(1, 1), activation='relu', padding='same'))
+    cnn.add(BatchNormalization())
+    cnn.add(MaxPool2D((3, 3), strides=(2, 2)))
+
+    cnn.add(Conv2D(384, (3, 3), strides=(1, 1), activation='relu', padding='same'))
+    cnn.add(BatchNormalization())
+
+    cnn.add(Conv2D(384, (1, 1), strides=(1, 1), activation='relu', padding='same'))
+    cnn.add(BatchNormalization())
+
+    cnn.add(Conv2D(256, (1, 1), strides=(1, 1), activation='relu', padding='same'))
+    cnn.add(BatchNormalization())
+    cnn.add(MaxPool2D((3, 3), strides=(2, 2)))
+
+    cnn.add(Flatten())
+    cnn.add(Dense(4096, activation='relu'))
+    cnn.add(Dropout(0.5))
+    
+    cnn.add(Dense(4096, activation='relu'))
+    cnn.add(Dropout(0.5))
+    cnn.add(Dense(NUM_CLASSES, activation='softmax'))
 
     # cnn.add(Flatten())
     # cnn.add(Dense(NUM_CLASSES, activation='softmax'))
@@ -129,7 +157,8 @@ def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dro
     cnn.compile(optimizer=opt,
                 loss='categorical_crossentropy',
                 metrics=['accuracy'])
-    cnn.fit(x, y, validation_split=0.1, batch_size=batchSize, epochs=eps, shuffle=True)
+    # cnn.fit(x, y, validation_split=0.1, batch_size=batchSize, epochs=eps, shuffle=True)
+    cnn.fit(trainSet, validation_data=valSet, epochs=eps, shuffle=True)
     return cnn
 
 #=========================<Pipeline Functions>==================================
@@ -155,36 +184,62 @@ def getRawData():
     return ((xTrain, yTrain), (xTest, yTest))
 
 
+def resizeImage(image, label):
+    return tf.image.resize(image, (227, 227)), label
+
+
 def preprocessData(raw):
     ((xTrain, yTrain), (xTest, yTest)) = raw
     xTrain, xTest = xTrain / 255.0, xTest / 255.0
+    # Obtain validation set from train set
+    xVal, yVal = xTrain[:5000], yTrain[:5000]
+    xTrain, yTrain = xTrain[5000:], yTrain[5000:]
+    yTrainP = to_categorical(yTrain, NUM_CLASSES)
+    yTestP = to_categorical(yTest, NUM_CLASSES)
+    yValP = to_categorical(yVal, NUM_CLASSES)
+    
     if ALGORITHM != "tf_conv":
         xTrainP = xTrain.reshape((xTrain.shape[0], IS))
         xTestP = xTest.reshape((xTest.shape[0], IS))
     else:
-        xTrainP = xTrain.reshape((xTrain.shape[0], IH, IW, IZ))
-        xTestP = xTest.reshape((xTest.shape[0], IH, IW, IZ))
-    yTrainP = to_categorical(yTrain, NUM_CLASSES)
-    yTestP = to_categorical(yTest, NUM_CLASSES)
-    print("New shape of xTrain dataset: %s." % str(xTrainP.shape))
-    print("New shape of xTest dataset: %s." % str(xTestP.shape))
-    print("New shape of yTrain dataset: %s." % str(yTrainP.shape))
-    print("New shape of yTest dataset: %s." % str(yTestP.shape))
-    return ((xTrainP, yTrainP), (xTestP, yTestP))
+        trainSet = tf.data.Dataset.from_tensor_slices((xTrain, yTrainP))
+        testSet = tf.data.Dataset.from_tensor_slices((xTest, yTestP))
+        valSet = tf.data.Dataset.from_tensor_slices((xVal, yValP))
+
+        size=tf.data.experimental.cardinality(trainSet).numpy()
+        trainSet = (trainSet.map(resizeImage)
+                            .shuffle(buffer_size=size)
+                            .batch(batch_size=BATCH_SIZE, drop_remainder=True))
+        testSet = (testSet.map(resizeImage)
+                          .shuffle(buffer_size=size)
+                          .batch(batch_size=BATCH_SIZE, drop_remainder=True))
+        valSet = (valSet.map(resizeImage)
+                        .shuffle(buffer_size=size)
+                        .batch(batch_size=BATCH_SIZE, drop_remainder=True))
+        # xTrainP = xTrain.reshape((xTrain.shape[0], IH, IW, IZ))
+        # xTestP = xTest.reshape((xTest.shape[0], IH, IW, IZ))
+    # print("New shape of xTrain dataset: %s." % str(xTrainP.shape))
+    # print("New shape of xTest dataset: %s." % str(xTestP.shape))
+    # print("New shape of yTrain dataset: %s." % str(yTrainP.shape))
+    # print("New shape of yTest dataset: %s." % str(yTestP.shape))
+    # return ((xTrainP, yTrainP), (xTestP, yTestP))
+    return trainSet, valSet, testSet
 
 
-def trainModel(data):
+def trainModel(trainData, valData):
     if LOAD_PATH != None:
         return tf.keras.models.load_model(LOAD_PATH)
-    xTrain, yTrain = data
+    # xTrain, yTrain = data
     if ALGORITHM == "guesser":
         return None   # Guesser has no model, as it is just guessing.
     elif ALGORITHM == "tf_net":
         print("Building and training TF_NN.")
-        return buildTFNeuralNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
+        # return buildTFNeuralNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
+        return
     elif ALGORITHM == "tf_conv":
         print("Building and training TF_CNN.")
-        return buildTFConvNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
+        # return buildTFConvNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
+        return buildTFConvNet(trainData, valData, eps=EPOCHS)
     else:
         raise ValueError("Algorithm not recognized.")
 
@@ -216,20 +271,29 @@ def runModel(data, model):
 
 
 def evalResults(data, preds):
-    xTest, yTest = data
+    # xTest, yTest = data
     acc = 0
-    for i in range(preds.shape[0]):
-        if np.array_equal(preds[i], yTest[i]):   acc = acc + 1
+    i = 0
+    for entity, in data.take(-1):
+        if np.array_equal(preds[i], entity[1].numpy()):     acc = acc + 1
+        i += 1
+    # for i in range(preds.shape[0]):
+    #     if np.array_equal(preds[i], yTest[i]):   acc = acc + 1
     accuracy = acc / preds.shape[0]
+    print("Dataset: %s" % DATASET)
     print("Classifier algorithm: %s" % ALGORITHM)
     print("Classifier accuracy: %f%%" % (accuracy * 100))
     print()
-    if SAVE_PATH != None:
-        # Save algorithm and dataset for future loading
-        metadata = open('%s/meta.txt' % SAVE_PATH, 'w')
-        metadata.write('%s\n%s\nepochs=%s\nbatchSize=%s\naccuracy=%f%%\n'
-                        % (ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, (accuracy * 100)))
-        metadata.close()
+    return (accuracy * 100)
+
+
+def saveMetaData(model, accuracy):
+    # Save algorithm and dataset for future loading
+    metadata = open('%s/meta.txt' % SAVE_PATH, 'w')
+    metadata.write('%s\n%s\nepochs=%s\nbatchSize=%s\naccuracy=%f%%\n\n\n'
+                    % (ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, accuracy))
+    model.summary(print_fn=lambda x: metadata.write(x + '\n'))
+    metadata.close()
 
 
 #=========================<Main>================================================
@@ -243,10 +307,7 @@ def parseArgs():
     except:
         raise ValueError('Unrecognized argument. See -h for help')
 
-    # Default save the model, create path
-    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H.%M.%S')
-    SAVE_PATH = './models/%s-%s-%s' % (ALGORITHM, DATASET, timestamp)
-
+    shouldSave = True
     algorithms = ['guesser', 'tf_net', 'tf_conv']
     datasets = ['mnist_d', 'mnist_f', 'cifar_10', 'cifar_100_c', 'cifar_100_f']
     for opt, arg in opts:
@@ -269,10 +330,10 @@ def parseArgs():
             if BATCH_SIZE < 1:
                 raise ValueError('Batch size must be at least 1')
         elif opt == '-s':
-            SAVE_PATH = None
+            shouldSave = False
         elif opt == '-l':
             LOAD_PATH = arg
-            SAVE_PATH = None    # If model is being loaded, no need to save it again
+            shouldSave = False    # If model is being loaded, no need to save it again
 
             # Load in the appropriate dataset and use appropriate algorithm from saved model
             metadata = open('%s/meta.txt' % LOAD_PATH, 'r')
@@ -289,17 +350,26 @@ def parseArgs():
                 % (algorithms, datasets))
             sys.exit()
 
+    # Default save the model, create path
+    if shouldSave:
+        timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H.%M.%S')
+        SAVE_PATH = './models/%s-%s-%s' % (ALGORITHM, DATASET, timestamp)
+
     setDataDimensions()
 
 
 def main():
     parseArgs()
     raw = getRawData()
+    global IH, IW
+    IH, IW = 227, 227
     data = preprocessData(raw)
-    model = trainModel(data[0])
-    preds = runModel(data[1][0], model)
-    evalResults(data[1], preds)
-
+    model = trainModel(data[0], data[1])
+    # preds = runModel(data[1][0], model)
+    preds = runModel(data[2], model)
+    accuracy = evalResults(data[2], preds)
+    if SAVE_PATH != None:
+        saveMetaData(model, accuracy)
 
 if __name__ == '__main__':
     main()
