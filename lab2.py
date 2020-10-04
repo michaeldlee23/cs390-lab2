@@ -7,7 +7,7 @@ from tensorflow.keras.layers import Conv2D, MaxPool2D, Dense, Flatten, Dropout, 
 from tensorflow.keras.utils import to_categorical
 import matplotlib as plt
 import random
-import time, datetime
+import datetime
 
 
 random.seed(1618)
@@ -31,8 +31,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 EPOCHS = 10
 BATCH_SIZE = 100
 HN = 512            # Number of Hidden Neurons
+DROP_RATE = 0.25
 SAVE_PATH = None
 LOAD_PATH = None
+LOG_PATH  = None
 
 def setDataDimensions():
     global NUM_CLASSES, IH, IW, IZ, IS
@@ -88,9 +90,13 @@ def buildTFNeuralNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS):
     return ann
 
 
-def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dropRate = 0.2):
+def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dropRate = DROP_RATE):
     cnn = tf.keras.models.Sequential()
-    cnn.add(Conv2D(32, (3, 3), padding='same', activation='relu', input_shape=(IH, IW, IZ)))
+    cnn.add(Conv2D(16, (2, 2), padding='same', activation='relu', input_shape=(IH, IW, IZ)))
+    cnn.add(BatchNormalization())
+
+    cnn.add(Conv2D(32, (3, 3), padding='same', activation='relu'))
+    cnn.add(BatchNormalization())
     cnn.add(MaxPool2D((2, 2)))
 
     cnn.add(Conv2D(64, (3, 3), padding='same', activation='relu'))
@@ -115,7 +121,14 @@ def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dro
     cnn.compile(optimizer=opt,
                 loss='categorical_crossentropy',
                 metrics=['accuracy'])
-    cnn.fit(x, y, validation_split=0.1, batch_size=batchSize, epochs=eps, shuffle=True)
+
+    tensorboardCallback = tf.keras.callbacks.TensorBoard(log_dir=LOG_PATH, histogram_freq=1)
+    cnn.fit(x, y,
+            validation_split=0.1,
+            batch_size=batchSize,
+            epochs=eps,
+            shuffle=True,
+            callbacks=[tensorboardCallback] if LOG_PATH != None else None)
     return cnn
 
 #=========================<Pipeline Functions>==================================
@@ -202,11 +215,12 @@ def runModel(data, model):
 
 
 def evalResults(data, preds):
-    xTest, yTest = data
+    _, yTest = data
     acc = 0
     for i in range(preds.shape[0]):
         if np.array_equal(preds[i], yTest[i]):   acc = acc + 1
     accuracy = acc / preds.shape[0]
+    print("Dataset: %s" % DATASET)
     print("Classifier algorithm: %s" % ALGORITHM)
     print("Classifier accuracy: %f%%" % (accuracy * 100))
     print()
@@ -216,8 +230,8 @@ def evalResults(data, preds):
 def saveMetaData(model, accuracy):
     # Save algorithm and dataset for future loading
     metadata = open('%s/meta.txt' % SAVE_PATH, 'w')
-    metadata.write('%s\n%s\nepochs=%s\nbatchSize=%s\naccuracy=%f%%\n\n\n'
-                    % (ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, accuracy))
+    metadata.write('%s\n%s\nepochs=%s\nbatchSize=%s\ndropRate=%s\naccuracy=%f%%\n\n\n'
+                    % (ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, DROP_RATE, accuracy))
     model.summary(print_fn=lambda x: metadata.write(x + '\n'))
     metadata.close()
 
@@ -225,7 +239,7 @@ def saveMetaData(model, accuracy):
 #=========================<Main>================================================
 
 def parseArgs():
-    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, SAVE_PATH, LOAD_PATH
+    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, SAVE_PATH, LOAD_PATH, LOG_PATH
     ALGORITHM, DATASET = 'tf_net', 'mnist_d'
     argv = sys.argv[1:]
     try:
@@ -278,8 +292,9 @@ def parseArgs():
 
     # Default save the model, create path
     if shouldSave:
-        timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H.%M.%S')
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H.%M.%S')
         SAVE_PATH = './models/%s-%s-%s' % (ALGORITHM, DATASET, timestamp)
+        LOG_PATH = './logs/fit/%s-%s-%s' % (ALGORITHM, DATASET, timestamp)
 
     setDataDimensions()
 
