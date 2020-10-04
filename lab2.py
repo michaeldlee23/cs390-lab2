@@ -55,19 +55,19 @@ def setDataDimensions():
         IH = 32
         IW = 32
         IZ = 3
-        IS = IH * IW
+        IS = IH * IW * IZ
     elif DATASET == "cifar_100_f":
         NUM_CLASSES = 100
         IH = 32
         IW = 32
         IZ = 3
-        IS = IH * IW
+        IS = IH * IW * IZ
     elif DATASET == "cifar_100_c":
         NUM_CLASSES = 20
         IH = 32
         IW = 32
         IZ = 3
-        IS = IH * IW
+        IS = IH * IW * IZ
 
 
 #=========================<Classifier Functions>================================
@@ -189,9 +189,6 @@ def trainModel(data):
 
 
 def runModel(data, model):
-    if ALGORITHM != "guesser" and SAVE_PATH != None:
-        print('saving model to %s...' % SAVE_PATH)
-        model.save(SAVE_PATH)
     if ALGORITHM == "guesser":
         return guesserClassifier(data)
     elif ALGORITHM == "tf_net":
@@ -229,6 +226,10 @@ def evalResults(data, preds):
 
 def saveMetaData(model, accuracy):
     # Save algorithm and dataset for future loading
+    print('saving model to %s...' % SAVE_PATH)
+    model.save(SAVE_PATH)
+
+    # Save hyperparameters, accuracy, and network architecture for easy reference
     metadata = open('%s/meta.txt' % SAVE_PATH, 'w')
     metadata.write('%s\n%s\nepochs=%s\nbatchSize=%s\ndropRate=%s\naccuracy=%f%%\n\n\n'
                     % (ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, DROP_RATE, accuracy))
@@ -295,6 +296,7 @@ def parseArgs():
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H.%M.%S')
         SAVE_PATH = './models/%s-%s-%s' % (ALGORITHM, DATASET, timestamp)
         LOG_PATH = './logs/fit/%s-%s-%s' % (ALGORITHM, DATASET, timestamp)
+        print(LOG_PATH)
 
     setDataDimensions()
 
@@ -306,8 +308,9 @@ def main():
     model = trainModel(data[0])
     preds = runModel(data[1][0], model)
     accuracy = evalResults(data[1], preds)
-    if SAVE_PATH != None:
+    if ALGORITHM != 'guesser' and SAVE_PATH != None:
         saveMetaData(model, accuracy)
+
 
 if __name__ == '__main__':
     main()
