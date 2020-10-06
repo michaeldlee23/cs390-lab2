@@ -87,7 +87,13 @@ def buildTFNeuralNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS):
                                       tf.keras.layers.Dense(HN, activation=tf.nn.sigmoid),
                                       tf.keras.layers.Dense(NUM_CLASSES, activation=tf.nn.softmax)])
     ann.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
-    ann.fit(x, y, validation_split=0.1, batch_size=batchSize, epochs=eps, shuffle=True)
+    tensorboardCallback = tf.keras.callbacks.TensorBoard(log_dir=LOG_PATH, histogram_freq=1)
+    ann.fit(x, y, 
+            validation_split=0.1, 
+            batch_size=batchSize, 
+            epochs=eps, 
+            shuffle=True,
+            callbacks=[tensorboardCallback] if LOG_PATH != None else None)
     return ann
 
 
