@@ -35,6 +35,7 @@ DROP_RATE = 0.25
 SAVE_PATH = None
 LOAD_PATH = None
 LOG_PATH  = None
+KEEP_TRAINING = False
 
 def setDataDimensions():
     global NUM_CLASSES, IH, IW, IZ, IS
@@ -90,38 +91,47 @@ def buildTFNeuralNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS):
     return ann
 
 
-def buildTFConvNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dropRate = DROP_RATE):
-    cnn = tf.keras.models.Sequential()
-    cnn.add(Conv2D(16, (2, 2), padding='same', activation='relu', input_shape=(IH, IW, IZ)))
-    cnn.add(BatchNormalization())
+def buildTFConvNet(x, y,
+                   batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dropRate = DROP_RATE,
+                   model=None):
+    cnn = model
+    if (cnn == None):
+        cnn = tf.keras.models.Sequential()
+        cnn.add(Conv2D(8, (2, 2), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
+        cnn.add(BatchNormalization())
+        cnn.add(Conv2D(16, (2, 2), padding='same', activation='elu'))
+        cnn.add(BatchNormalization())
 
-    cnn.add(Conv2D(32, (3, 3), padding='same', activation='relu'))
-    cnn.add(BatchNormalization())
-    cnn.add(MaxPool2D((2, 2)))
+        cnn.add(Conv2D(32, (3, 3), padding='same', activation='elu'))
+        cnn.add(BatchNormalization())
+        cnn.add(MaxPool2D((2, 2)))
+        cnn.add(Dropout(0.5 * dropRate))
 
-    cnn.add(Conv2D(64, (3, 3), padding='same', activation='relu'))
-    cnn.add(BatchNormalization())
-    cnn.add(MaxPool2D((2, 2)))
+        cnn.add(Conv2D(64, (3, 3), padding='same', activation='elu'))
+        cnn.add(BatchNormalization())
+        cnn.add(MaxPool2D((2, 2)))
+        cnn.add(Dropout(dropRate))
 
-    cnn.add(Conv2D(128, (3, 3), padding='same', activation='relu'))
-    cnn.add(BatchNormalization())
-    cnn.add(Conv2D(128, (3, 3), padding='same', activation='relu'))
-    cnn.add(BatchNormalization())
-    cnn.add(MaxPool2D((2, 2)))
+        cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu'))
+        cnn.add(BatchNormalization())
+        cnn.add(Conv2D(128, (3, 3), padding='same', activation='elu'))
+        cnn.add(BatchNormalization())
+        cnn.add(MaxPool2D((2, 2)))
+        cnn.add(Dropout(dropRate))
 
-    cnn.add(Flatten())
-    cnn.add(Dense(256, activation='relu'))
-    cnn.add(Dropout(dropRate))
-    cnn.add(Dense(256, activation='relu'))
-    cnn.add(Dropout(dropRate))
-    cnn.add(Dense(NUM_CLASSES, activation='softmax'))
+        cnn.add(Flatten())
+        cnn.add(Dense(1024, activation='elu'))
+        cnn.add(Dropout(2 * dropRate))
+        cnn.add(Dense(1024, activation='elu'))
+        cnn.add(Dropout(2 * dropRate))
+        cnn.add(Dense(NUM_CLASSES, activation='softmax'))
+
+        opt = tf.optimizers.RMSprop(lr=0.001, decay=1e-6)
+        cnn.compile(optimizer=opt,
+                    loss='categorical_crossentropy',
+                    metrics=['accuracy'])
 
     cnn.summary()
-    opt = tf.optimizers.RMSprop(lr=0.001, decay=1e-6)
-    cnn.compile(optimizer=opt,
-                loss='categorical_crossentropy',
-                metrics=['accuracy'])
-
     tensorboardCallback = tf.keras.callbacks.TensorBoard(log_dir=LOG_PATH, histogram_freq=1)
     cnn.fit(x, y,
             validation_split=0.1,
@@ -173,7 +183,7 @@ def preprocessData(raw):
 
 
 def trainModel(data):
-    if LOAD_PATH != None:
+    if LOAD_PATH != None and KEEP_TRAINING == False:
         return tf.keras.models.load_model(LOAD_PATH)
     xTrain, yTrain = data
     if ALGORITHM == "guesser":
@@ -183,7 +193,11 @@ def trainModel(data):
         return buildTFNeuralNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
     elif ALGORITHM == "tf_conv":
         print("Building and training TF_CNN.")
-        return buildTFConvNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
+        if KEEP_TRAINING == False:
+            return buildTFConvNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
+        return buildTFConvNet(xTrain, yTrain,
+                              batchSize=BATCH_SIZE, eps=EPOCHS,
+                              model=tf.keras.models.load_model(LOAD_PATH))
     else:
         raise ValueError("Algorithm not recognized.")
 
@@ -240,11 +254,11 @@ def saveMetaData(model, accuracy):
 #=========================<Main>================================================
 
 def parseArgs():
-    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, SAVE_PATH, LOAD_PATH, LOG_PATH
+    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, SAVE_PATH, LOAD_PATH, LOG_PATH, KEEP_TRAINING
     ALGORITHM, DATASET = 'tf_net', 'mnist_d'
     argv = sys.argv[1:]
     try:
-        opts, _ = getopt.getopt(argv, 'a:d:e:b:l:sh')
+        opts, _ = getopt.getopt(argv, 'a:d:e:b:l:L:sh')
     except:
         raise ValueError('Unrecognized argument. See -h for help')
 
@@ -272,7 +286,9 @@ def parseArgs():
                 raise ValueError('Batch size must be at least 1')
         elif opt == '-s':
             shouldSave = False
-        elif opt == '-l':
+        elif opt == '-l' or opt == '-L':
+            if opt == '-L':
+                KEEP_TRAINING = True
             LOAD_PATH = arg
             shouldSave = False    # If model is being loaded, no need to save it again
 
