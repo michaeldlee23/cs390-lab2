@@ -36,6 +36,7 @@ SAVE_PATH = None
 LOAD_PATH = None
 LOG_PATH  = None
 KEEP_TRAINING = False
+SHOULD_CROP = False
 
 def setDataDimensions():
     global NUM_CLASSES, IH, IW, IZ, IS
@@ -82,23 +83,27 @@ def guesserClassifier(xTest):
     return np.array(ans)
 
 
-def buildTFNeuralNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS):
+def buildTFNeuralNet(trainSet, valSet, eps = EPOCHS):
     ann = tf.keras.models.Sequential([tf.keras.layers.Flatten(),
                                       tf.keras.layers.Dense(HN, activation=tf.nn.sigmoid),
                                       tf.keras.layers.Dense(NUM_CLASSES, activation=tf.nn.softmax)])
     ann.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
     tensorboardCallback = tf.keras.callbacks.TensorBoard(log_dir=LOG_PATH, histogram_freq=1)
-    ann.fit(x, y, 
-            validation_split=0.1, 
-            batch_size=batchSize, 
-            epochs=eps, 
-            shuffle=True,
+    # ann.fit(x, y, 
+    #         validation_split=0.1, 
+    #         batch_size=batchSize, 
+    #         epochs=eps, 
+    #         shuffle=True,
+    #         callbacks=[tensorboardCallback] if LOG_PATH != None else None)
+    ann.fit(trainSet, valSet,
+            validation_data=valSet,
+            epochs=eps,
             callbacks=[tensorboardCallback] if LOG_PATH != None else None)
     return ann
 
 
-def buildTFConvNet(x, y,
-                   batchSize=BATCH_SIZE, eps = EPOCHS, dropout = True, dropRate = DROP_RATE,
+def buildTFConvNet(trainSet, valSet,
+                   eps = EPOCHS, dropout = True, dropRate = DROP_RATE,
                    model=None):
     cnn = model
     if (cnn == None):
@@ -139,11 +144,15 @@ def buildTFConvNet(x, y,
 
     cnn.summary()
     tensorboardCallback = tf.keras.callbacks.TensorBoard(log_dir=LOG_PATH, histogram_freq=1)
-    cnn.fit(x, y,
-            validation_split=0.1,
-            batch_size=batchSize,
+    # cnn.fit(x, y,
+    #         validation_split=0.1,
+    #         batch_size=batchSize,
+    #         epochs=eps,
+    #         shuffle=True,
+    #         callbacks=[tensorboardCallback] if LOG_PATH != None else None)
+    cnn.fit(trainSet,
+            validation_data=valSet,
             epochs=eps,
-            shuffle=True,
             callbacks=[tensorboardCallback] if LOG_PATH != None else None)
     return cnn
 
@@ -170,40 +179,86 @@ def getRawData():
     return ((xTrain, yTrain), (xTest, yTest))
 
 
+def random_crop(image, label):
+    global IH, IW
+    IH, IW = 24, 24
+    image = tf.image.random_crop(image, size=[IH, IW, 3])
+    image = tf.clip_by_value(image, 0, 1)
+    return image, label
+
+
 def preprocessData(raw):
     ((xTrain, yTrain), (xTest, yTest)) = raw
     xTrain, xTest = xTrain / 255.0, xTest / 255.0
+    
     if ALGORITHM != "tf_conv":
-        xTrainP = xTrain.reshape((xTrain.shape[0], IS))
-        xTestP = xTest.reshape((xTest.shape[0], IS))
-    else:
-        xTrainP = xTrain.reshape((xTrain.shape[0], IH, IW, IZ))
-        xTestP = xTest.reshape((xTest.shape[0], IH, IW, IZ))
+        xTrain = xTrain.reshape((xTrain.shape[0], IS))
+        xTest = xTest.reshape((xTest.shape[0], IS))
+
+    split = len(xTrain) // 10
+    xVal, yVal = xTrain[:split], yTrain[:split]
+    xTrain, yTrain = xTrain[split:], yTrain[split:]
+
     yTrainP = to_categorical(yTrain, NUM_CLASSES)
     yTestP = to_categorical(yTest, NUM_CLASSES)
-    print("New shape of xTrain dataset: %s." % str(xTrainP.shape))
-    print("New shape of xTest dataset: %s." % str(xTestP.shape))
-    print("New shape of yTrain dataset: %s." % str(yTrainP.shape))
-    print("New shape of yTest dataset: %s." % str(yTestP.shape))
-    return ((xTrainP, yTrainP), (xTestP, yTestP))
+    yValP = to_categorical(yVal, NUM_CLASSES)
+
+    trainSet = tf.data.Dataset.from_tensor_slices((xTrain, yTrainP))
+    testSet = tf.data.Dataset.from_tensor_slices((xTest, yTestP))
+    valSet = tf.data.Dataset.from_tensor_slices((xVal, yValP))
+
+    size = tf.data.experimental.cardinality(trainSet).numpy()
+    if SHOULD_CROP:
+        trainSet = (trainSet.map(random_crop)
+                            .shuffle(buffer_size=size)
+                            .batch(batch_size=BATCH_SIZE))
+    else:
+        trainSet = (trainSet.shuffle(buffer_size=size)
+                            .batch(batch_size=BATCH_SIZE))
+    testSet = (testSet.shuffle(buffer_size=size)
+                        .batch(batch_size=BATCH_SIZE))
+    valSet = (valSet.shuffle(buffer_size=size)
+                    .batch(batch_size=BATCH_SIZE))
+
+    return trainSet, valSet, testSet
+    # if ALGORITHM != "tf_conv":
+    #     xTrainP = xTrain.reshape((xTrain.shape[0], IS))
+    #     xTestP = xTest.reshape((xTest.shape[0], IS))
+    #     yTrainP = to_categorical(yTrain, NUM_CLASSES)
+    #     yTestP = to_categorical(yTest, NUM_CLASSES)
+    #     return ((xTrainP, yTrainP), (xTestP, yTestP))
+    # else:
+    #     # xTrainP = xTrain.reshape((xTrain.shape[0], IH, IW, IZ))
+    #     # xTestP = xTest.reshape((xTest.shape[0], IH, IW, IZ))
+ 
+    #     return trainSet, valSet, testSet
+    
+    # print("New shape of xTrain dataset: %s." % str(xTrainP.shape))
+    # print("New shape of xTest dataset: %s." % str(xTestP.shape))
+    # print("New shape of yTrain dataset: %s." % str(yTrainP.shape))
+    # print("New shape of yTest dataset: %s." % str(yTestP.shape))
 
 
-def trainModel(data):
+def trainModel(trainData, valData):
     if LOAD_PATH != None and KEEP_TRAINING == False:
         return tf.keras.models.load_model(LOAD_PATH)
-    xTrain, yTrain = data
+    # xTrain, yTrain = data
     if ALGORITHM == "guesser":
         return None   # Guesser has no model, as it is just guessing.
     elif ALGORITHM == "tf_net":
         print("Building and training TF_NN.")
-        return buildTFNeuralNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
+        # return buildTFNeuralNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
+        return buildTFNeuralNet(trainData, valData, eps=EPOCHS)
     elif ALGORITHM == "tf_conv":
         print("Building and training TF_CNN.")
+        # if KEEP_TRAINING == False:
+        #     return buildTFConvNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
+        # return buildTFConvNet(xTrain, yTrain,
+        #                       batchSize=BATCH_SIZE, eps=EPOCHS,
+        #                       model=tf.keras.models.load_model(LOAD_PATH))
         if KEEP_TRAINING == False:
-            return buildTFConvNet(xTrain, yTrain, batchSize=BATCH_SIZE, eps=EPOCHS)
-        return buildTFConvNet(xTrain, yTrain,
-                              batchSize=BATCH_SIZE, eps=EPOCHS,
-                              model=tf.keras.models.load_model(LOAD_PATH))
+            return buildTFConvNet(trainData, valData, eps=EPOCHS)
+        return buildTFConvNet(trainData, valData, eps=EPOCHS, model=tf.keras.models.load_model(LOAD_PATH))
     else:
         raise ValueError("Algorithm not recognized.")
 
@@ -233,9 +288,12 @@ def runModel(data, model):
 
 def evalResults(data, preds):
     _, yTest = data
-    acc = 0
-    for i in range(preds.shape[0]):
-        if np.array_equal(preds[i], yTest[i]):   acc = acc + 1
+    acc, i = 0, 0
+    # for i in range(preds.shape[0]):
+    #     if np.array_equal(preds[i], yTest[i]):   acc = acc + 1
+    for entity, in data.take(-1):
+        if np.array_equal(preds[i], entity[1].numpy()):     acc = acc + 1
+        i += 1
     accuracy = acc / preds.shape[0]
     print("Dataset: %s" % DATASET)
     print("Classifier algorithm: %s" % ALGORITHM)
@@ -260,11 +318,11 @@ def saveMetaData(model, accuracy):
 #=========================<Main>================================================
 
 def parseArgs():
-    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, SAVE_PATH, LOAD_PATH, LOG_PATH, KEEP_TRAINING
+    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, SAVE_PATH, LOAD_PATH, LOG_PATH, KEEP_TRAINING, SHOULD_CROP
     ALGORITHM, DATASET = 'tf_net', 'mnist_d'
     argv = sys.argv[1:]
     try:
-        opts, _ = getopt.getopt(argv, 'a:d:e:b:l:L:sh')
+        opts, _ = getopt.getopt(argv, 'a:d:e:b:l:L:sch')
     except:
         raise ValueError('Unrecognized argument. See -h for help')
 
@@ -282,6 +340,8 @@ def parseArgs():
             if arg not in datasets:
                 raise ValueError('Unrecognized algorithm. Try one of %s' % datasets)
             DATASET = arg
+        elif opt == '-c':
+            SHOULD_CROP = True
         elif opt == '-e':
             EPOCHS = int(arg)
             if EPOCHS < 1:
@@ -327,9 +387,12 @@ def main():
     parseArgs()
     raw = getRawData()
     data = preprocessData(raw)
-    model = trainModel(data[0])
-    preds = runModel(data[1][0], model)
-    accuracy = evalResults(data[1], preds)
+    model = trainModel(data[0], data[1])
+    preds = runModel(data[2], model)
+    accuracy = evalResults(data[2], preds)
+    # model = trainModel(data[0])
+    # preds = runModel(data[1][0], model)
+    # accuracy = evalResults(data[1], preds)
     if ALGORITHM != 'guesser' and SAVE_PATH != None:
         saveMetaData(model, accuracy)
 
