@@ -7,7 +7,8 @@ from tensorflow.keras.layers import Conv2D, MaxPool2D, Dense, Flatten, Dropout, 
 from tensorflow.keras.utils import to_categorical
 import random
 import datetime
-
+np.set_printoptions(threshold=np.inf)
+np.set_printoptions(linewidth=np.inf)
 
 random.seed(1618)
 np.random.seed(1618)
@@ -105,8 +106,8 @@ def buildTFConvNet(x, y,
         cnn = tf.keras.models.Sequential()
         if SHOULD_CROP:
           global IH, IW
-          cnn.add(tf.keras.layers.experimental.preprocessing.RandomCrop(IH, IW))
           IH, IW = 24, 24
+          cnn.add(tf.keras.layers.experimental.preprocessing.RandomCrop(IH, IW))
 
         cnn.add(Conv2D(8, (2, 2), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
         cnn.add(BatchNormalization())
@@ -239,9 +240,13 @@ def runModel(data, model):
 def evalResults(data, preds):
     _, yTest = data
     acc = 0
+    #predTotals, testTotals = list(), list()
     for i in range(preds.shape[0]):
         if np.array_equal(preds[i], yTest[i]):   acc = acc + 1
+        #predTotals.append(np.argmax(preds[i]))
+        #testTotals.append(np.argmax(preds[i]))
     accuracy = acc / preds.shape[0]
+    #print(tf.math.confusion_matrix(testTotals, predTotals).numpy())
     print("Dataset: %s" % DATASET)
     print("Classifier algorithm: %s" % ALGORITHM)
     print("Classifier accuracy: %f%%" % (accuracy * 100))
@@ -300,10 +305,11 @@ def parseArgs():
         elif opt == '-s':
             shouldSave = False
         elif opt == '-l' or opt == '-L':
-            if opt == '-L':
-                KEEP_TRAINING = True
             LOAD_PATH = arg
             shouldSave = False    # If model is being loaded, no need to save it again
+            if opt == '-L':
+                KEEP_TRAINING = True
+                shouldSave = True
 
             # Load in the appropriate dataset and use appropriate algorithm from saved model
             metadata = open('%s/meta.txt' % LOAD_PATH, 'r')
