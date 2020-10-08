@@ -5,7 +5,6 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.layers import Conv2D, MaxPool2D, Dense, Flatten, Dropout, BatchNormalization
 from tensorflow.keras.utils import to_categorical
-import matplotlib as plt
 import random
 import datetime
 
@@ -36,6 +35,7 @@ SAVE_PATH = None
 LOAD_PATH = None
 LOG_PATH  = None
 KEEP_TRAINING = False
+SHOULD_CROP = False
 
 def setDataDimensions():
     global NUM_CLASSES, IH, IW, IZ, IS
@@ -88,10 +88,10 @@ def buildTFNeuralNet(x, y, batchSize=BATCH_SIZE, eps = EPOCHS):
                                       tf.keras.layers.Dense(NUM_CLASSES, activation=tf.nn.softmax)])
     ann.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
     tensorboardCallback = tf.keras.callbacks.TensorBoard(log_dir=LOG_PATH, histogram_freq=1)
-    ann.fit(x, y, 
-            validation_split=0.1, 
-            batch_size=batchSize, 
-            epochs=eps, 
+    ann.fit(x, y,
+            validation_split=0.1,
+            batch_size=batchSize,
+            epochs=eps,
             shuffle=True,
             callbacks=[tensorboardCallback] if LOG_PATH != None else None)
     return ann
@@ -103,6 +103,11 @@ def buildTFConvNet(x, y,
     cnn = model
     if (cnn == None):
         cnn = tf.keras.models.Sequential()
+        if SHOULD_CROP:
+          global IH, IW
+          cnn.add(tf.keras.layers.experimental.preprocessing.RandomCrop(IH, IW))
+          IH, IW = 24, 24
+
         cnn.add(Conv2D(8, (2, 2), padding='same', activation='elu', input_shape=(IH, IW, IZ)))
         cnn.add(BatchNormalization())
         cnn.add(Conv2D(16, (2, 2), padding='same', activation='elu'))
@@ -137,7 +142,6 @@ def buildTFConvNet(x, y,
                     loss='categorical_crossentropy',
                     metrics=['accuracy'])
 
-    cnn.summary()
     tensorboardCallback = tf.keras.callbacks.TensorBoard(log_dir=LOG_PATH, histogram_freq=1)
     cnn.fit(x, y,
             validation_split=0.1,
@@ -145,6 +149,7 @@ def buildTFConvNet(x, y,
             epochs=eps,
             shuffle=True,
             callbacks=[tensorboardCallback] if LOG_PATH != None else None)
+    cnn.summary()
     return cnn
 
 #=========================<Pipeline Functions>==================================
@@ -260,11 +265,11 @@ def saveMetaData(model, accuracy):
 #=========================<Main>================================================
 
 def parseArgs():
-    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, SAVE_PATH, LOAD_PATH, LOG_PATH, KEEP_TRAINING
+    global ALGORITHM, DATASET, EPOCHS, BATCH_SIZE, SAVE_PATH, LOAD_PATH, LOG_PATH, KEEP_TRAINING, SHOULD_CROP
     ALGORITHM, DATASET = 'tf_net', 'mnist_d'
     argv = sys.argv[1:]
     try:
-        opts, _ = getopt.getopt(argv, 'a:d:e:b:l:L:sh')
+        opts, _ = getopt.getopt(argv, 'a:d:e:b:l:L:sch')
     except:
         raise ValueError('Unrecognized argument. See -h for help')
 
@@ -282,6 +287,8 @@ def parseArgs():
             if arg not in datasets:
                 raise ValueError('Unrecognized algorithm. Try one of %s' % datasets)
             DATASET = arg
+        elif opt == '-c':
+            SHOULD_CROP = True
         elif opt == '-e':
             EPOCHS = int(arg)
             if EPOCHS < 1:
@@ -308,8 +315,10 @@ def parseArgs():
                 -d <dataset> | %s\n\
                 -e <epochs>\n\
                 -b <batchSize>\n\
-                -s default=True\n\
-                -l <path to model>\n'
+                -c toggle random cropping | default=False\n\
+                -s toggle model saving | default=True\n\
+                -l <path to model to load>\n\
+                -L <path to model to load> (continues training)\n'
                 % (algorithms, datasets))
             sys.exit()
 
